@@ -1,0 +1,13 @@
+mlflow
+flask
+flask-restful
+boto3
+peewee
+psycopg2-binary
+pyarrow
+fsspec
+s3fs
+flask-cors
+gunicorn
+coloredlogs
+pymongo

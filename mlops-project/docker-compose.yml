@@ -1,0 +1,302 @@
+version: '3'
+
+services:
+########################################################################
+# Storage Service
+########################################################################
+  db-mlflow:
+    image: postgres:14-alpine
+    restart: always
+    healthcheck:
+      test: pg_isready -q -d mlflow -U mlflow || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    expose:
+      - "5432"
+    environment:
+      POSTGRES_USER: mlflow
+      POSTGRES_PASSWORD: mlflow
+      POSTGRES_DB: mlflow
+    volumes:
+      - mlflow-db-volume:/var/lib/postgresql/data
+    networks:
+      - backend
+
+  db-orion:
+    image: postgres:14-alpine
+    restart: always
+    healthcheck:
+      test: pg_isready -q -d orion -U orion || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    expose:
+      - "5432"
+    environment:
+      POSTGRES_USER: orion
+      POSTGRES_PASSWORD: orion
+      POSTGRES_DB: orion
+    volumes:
+      - orion-db-volume:/var/lib/postgresql/data
+    networks:
+      - backend
+
+  db-service:
+    image: postgres:14-alpine
+    restart: always
+    healthcheck:
+      test: pg_isready -q -d fungis -U fungis || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    expose:
+      - "5432"
+    environment:
+      POSTGRES_USER: fungis
+      POSTGRES_PASSWORD: fungis
+      POSTGRES_DB: fungis
+    volumes:
+      - fungis-db-volume:/var/lib/postgresql/data
+    networks:
+      - backend
+
+  localstack:
+    restart: always
+    image: localstack/localstack
+    ports:
+      - "4566:4566"
+    expose:
+      - "4566"
+    environment:
+      - SERVICES=s3
+    volumes:
+      - ./infra/aws_pre:/docker-entrypoint-initaws.d
+      - localstack-vol:/tmp/localstack
+    networks:
+      backend:
+        ipv4_address: 10.0.0.20
+
+  mongo:
+    image: mongo
+    restart: always
+    mem_limit: 512m
+    mem_reservation: 128M
+    cpus: 1
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: fungus
+      MONGO_INITDB_ROOT_PASSWORD: fungus
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - backend
+
+########################################################################
+# Frontend services
+########################################################################
+  adminer:
+    image: adminer
+    restart: always
+    expose:
+      - "8080"
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db-mlflow
+    networks:
+      - frontend
+      - backend
+
+  mongo-express:
+    image: mongo-express
+    restart: always
+    ports:
+      - 8081:8081
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: fungus
+      ME_CONFIG_MONGODB_ADMINPASSWORD: fungus
+      ME_CONFIG_MONGODB_URL: mongodb://fungus:fungus@mongo:27017/
+    depends_on:
+      - mongo
+    networks:
+      - frontend
+      - backend
+
+  mlflow:
+    restart: always
+    image: neimv/mlflow
+    # build: ./infra/mlflow
+    mem_limit: 1G
+    mem_reservation: 128M
+    cpus: 2.0
+    expose:
+      - "5000"
+    ports:
+      - "5000:5000"
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      db-mlflow:
+        condition: service_healthy
+    environment:
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=us-west-1
+      - MLFLOW_S3_ENDPOINT_URL=http://localstack:4566
+    command: mlflow server
+      --backend-store-uri postgresql+psycopg2://mlflow:mlflow@db-mlflow:5432/mlflow
+      --default-artifact-root s3://mlflow/
+      --host 0.0.0.0
+
+  prefect:
+    restart: always
+    image: neimv/prefect
+    # build: ./infra/prefect
+    mem_limit: 1G
+    mem_reservation: 128M
+    cpus: 2.0
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4200/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    environment:
+      - PREFECT_ORION_DATABASE_CONNECTION_URL=postgresql+asyncpg://orion:orion@db-orion:5432/orion
+      - PREFECT_ORION_DATABASE_TIMEOUT=30 # This configuration is because in my laptop does't start
+      - PREFECT_ACTION=server
+      - S3_ENDPOINT_URL=http://localstack:4566
+      - MLFLOW_SET_TRACKING=http://mlflow:5000
+      - MLFLOW_S3_ENDPOINT_URL=http://localstack:4566
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - HOST_JENKINS=jenkins:8080
+      - IN_DOCKER=1
+    expose:
+      - "4200"
+    ports:
+      - "4200:4200/udp"
+      - "4200:4200/tcp"
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      db-orion:
+        condition: service_healthy
+
+  prefect-agent:
+    restart: always
+    image: neimv/prefect
+    # build: ./infra/prefect
+    mem_limit: 4G
+    mem_reservation: 128M
+    cpus: 2.0
+    environment:
+      - PREFECT_ORION_DATABASE_CONNECTION_URL=postgresql+asyncpg://orion:orion@db-orion:5432/orion
+      - PREFECT_ORION_DATABASE_TIMEOUT=30
+      - PREFECT_ACTION=worker
+      - PREFECT_API=http://prefect:4200/api
+      - S3_ENDPOINT_URL=http://localstack:4566
+      - MLFLOW_SET_TRACKING=http://mlflow:5000
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - LOCALSTACK_SERVER=localstack
+      - PROJECT_PREFECT=fungus
+      - HOST_JENKINS=jenkins:8080
+      - IN_DOCKER=1
+    networks:
+      - backend
+    depends_on:
+      prefect:
+        condition: service_healthy
+      localstack:
+        condition: service_started
+
+########################################################################
+# Monitoring services
+########################################################################
+  prometheus:
+    image: neimv/prometheus
+    # build: ./infra/prometheus
+    volumes:
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    ports:
+      - "9091:9090"
+    networks:
+      - backend
+    restart: always
+
+  grafana:
+    image: neimv/grafana
+    # build: ./infra/grafana
+    user: "472"
+    depends_on:
+      - prometheus
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - backend
+      - frontend
+    restart: always
+
+  evidently:
+    image: neimv/evidently
+    # build: ./infra/evidently_service/
+    depends_on:
+      - grafana
+    ports:
+      - "5005:5005"
+    networks:
+      - backend
+      - frontend
+
+########################################################################
+# CD service
+########################################################################
+# https://www.cloudbees.com/blog/how-to-install-and-run-jenkins-with-docker-compose
+  jenkins:
+    image: jenkins/jenkins:lts
+    user: root
+    mem_limit: 1G
+    mem_reservation: 128M
+    cpus: 2.0
+    ports:
+      - 8010:8080
+      - 50000:50000
+    volumes:
+      - jenkins-volume:/var/jenkins_home
+      - jenkins-docker-certs:/certs/client:ro
+      - /usr/bin/docker:/usr/bin/docker
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - backend
+      - frontend
+    restart: always
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.0.0.0/16
+          gateway: 10.0.0.1
+
+
+volumes:
+  mlflow-db-volume:
+  sftp-volume:
+  orion-db-volume:
+  fungis-db-volume:
+  prometheus_data:
+  grafana_data:
+  mongo_data:
+  jenkins-volume:
+  jenkins-docker-certs:
+  localstack-vol:

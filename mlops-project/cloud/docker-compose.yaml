@@ -1,0 +1,131 @@
+# Docker compose to simulate storage (dbs, s3)
+
+version: '3'
+
+services:
+########################################################################
+# Storage Service
+########################################################################
+  db-mlflow:
+    image: postgres:14-alpine
+    restart: always
+    healthcheck:
+      test: pg_isready -q -d mlflow -U mlflow || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    expose:
+      - "5432"
+    environment:
+      POSTGRES_USER: mlflow
+      POSTGRES_PASSWORD: mlflow
+      POSTGRES_DB: mlflow
+    volumes:
+      - mlflow-db-volume:/var/lib/postgresql/data
+    networks:
+      backend:
+        ipv4_address: 10.0.0.21
+
+  db-orion:
+    image: postgres:14-alpine
+    restart: always
+    healthcheck:
+      test: pg_isready -q -d orion -U orion || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    expose:
+      - "5432"
+    environment:
+      POSTGRES_USER: orion
+      POSTGRES_PASSWORD: orion
+      POSTGRES_DB: orion
+    volumes:
+      - orion-db-volume:/var/lib/postgresql/data
+    networks:
+      backend:
+        ipv4_address: 10.0.0.22
+
+  db-service:
+    image: postgres:14-alpine
+    restart: always
+    healthcheck:
+      test: pg_isready -q -d fungis -U fungis || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    expose:
+      - "5432"
+    environment:
+      POSTGRES_USER: fungis
+      POSTGRES_PASSWORD: fungis
+      POSTGRES_DB: fungis
+    volumes:
+      - fungis-db-volume:/var/lib/postgresql/data
+    networks:
+      backend:
+        ipv4_address: 10.0.0.23
+
+  localstack:
+    restart: always
+    image: localstack/localstack
+    ports:
+      - "4566:4566"
+    expose:
+      - "4566"
+    environment:
+      - SERVICES=s3
+    volumes:
+      - ./infra/aws_pre:/docker-entrypoint-initaws.d
+      - s3-volume:/tmp/localstack
+    networks:
+      backend:
+        ipv4_address: 10.0.0.20
+
+  adminer:
+    image: adminer
+    restart: always
+    expose:
+      - "8080"
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db-mlflow
+    networks:
+      - frontend
+      - backend
+
+  jenkins:
+    image: jenkins/jenkins:lts
+    user: root
+    mem_limit: 1G
+    mem_reservation: 128M
+    cpus: 2.0
+    ports:
+      - 8010:8080
+      - 50000:50000
+    volumes:
+      - /usr/bin/docker:/usr/bin/docker
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - backend
+      - frontend
+    restart: always
+
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.0.0.0/16
+          gateway: 10.0.0.1
+
+
+volumes:
+  mlflow-db-volume:
+  s3-volume:
+  orion-db-volume:
+  fungis-db-volume:

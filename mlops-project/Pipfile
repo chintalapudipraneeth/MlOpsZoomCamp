@@ -1,0 +1,48 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+pandas = "*"
+scikit-learn = "*"
+hyperopt = "*"
+click = "*"
+sphinx = "*"
+coverage = "*"
+python-dotenv = "*"
+coloredlogs = "*"
+pyarrow = "*"
+mlflow = "*"
+click-spinner = "*"
+prefect = "==2.0.3"
+boto3 = "*"
+s3fs = "*"
+requests = "*"
+pymongo = "*"
+jenkinsapi = "*"
+pandarallel = "*"
+kubernetes = "*"
+
+[dev-packages]
+flake8 = "*"
+black = "*"
+isort = "*"
+jupyterlab = "*"
+pandas-profiling = {extras = ["notebook"], version = "*"}
+seaborn = "*"
+bokeh = "*"
+mypy = "*"
+pylint = "*"
+pytest = "*"
+pre-commit = "*"
+ipython = "*"
+coverage = "*"
+flask-cors = "*"
+peewee = "*"
+mock = "*"
+mongomock = "*"
+flask = "*"
+
+[requires]
+python_version = "3.9"

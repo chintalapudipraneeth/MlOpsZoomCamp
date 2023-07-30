@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ml-service-neimv
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ml-service
+      owner: neimv
+  template:
+    metadata:
+      labels:
+        app: ml-service
+        owner: neimv
+    spec:
+      containers:
+      - name: ml-service-neimv
+        imagePullPolicy: Always
+        env:
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: commons
+              key: aws_access_key_id
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: commons
+              key: aws_secret_access_key
+        - name: AWS_DEFAULT_REGION
+          valueFrom:
+            secretKeyRef:
+              name: commons
+              key: aws_default_region
+        - name: REGISTER_MODEL
+          value: FungusBinaryClassifier
+        - name: MLFLOW_SET_TRACKING
+          value: http://mlflow:5000
+        - name: MLFLOW_S3_ENDPOINT_URL
+          value: http://localstack:4566
+        - name: BASE_PATH_DF
+          value: s3://mlflow/data/processed/
+        - name: DB
+          value: fungis
+        - name: USER_DB
+          value: fungis
+        - name: PASSWORD_DB
+          value: fungis
+        - name: HOST_DB
+          value: db-service
+        - name: MONGO_USER
+          value: fungus
+        - name: MONGO_PASSWORD
+          value: fungus
+        - name: MONGO_DB
+          value: fungus
+        - name: MONGO_HOST
+          value: mongo
+        - name: MONGO_PORT
+          value: "27017"
+        - name: MONGO_COLLECTION
+          value: fungus
+        image: neimv/ml-service
+        ports:
+        - containerPort: 8000

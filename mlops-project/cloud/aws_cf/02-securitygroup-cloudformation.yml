@@ -1,0 +1,109 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Resources:
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow Access to SSH
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: "0.0.0.0/0"
+      VpcId: !ImportValue VPC
+
+  SecurityGroupDB:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow Access to Postgres
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !GetAtt SecurityGroup.GroupId
+      VpcId: !ImportValue VPC
+
+  SecurityGroupMlflow:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow Access to mlflow
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5000
+          ToPort: 5000
+          CidrIp: "0.0.0.0/0"
+      VpcId: !ImportValue VPC
+
+  SecurityGroupPrefect:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow Access to prefect
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 4200
+          ToPort: 4200
+          CidrIp: "0.0.0.0/0"
+      VpcId: !ImportValue VPC
+
+  SecurityGroupKube:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow Access to prefect
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 30000
+          ToPort: 65535
+          CidrIp: "0.0.0.0/0"
+      VpcId: !ImportValue VPC
+
+  EksSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Cluster communication with worker nodes
+      VpcId: !ImportValue VPC
+
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: "DBSubnetGroup for RDS postgresql instance"
+      DBSubnetGroupName: DBSubnetGroup
+      SubnetIds:
+        - !ImportValue PrivateSubnet1
+        - !ImportValue PrivateSubnet2
+
+Outputs:
+  SecurityGroup:
+    Description: id of security group
+    Value: !Ref SecurityGroup
+    Export:
+      Name: SecurityGroupId
+  SecurityGroupDB:
+    Description: id of security group
+    Value: !Ref SecurityGroupDB
+    Export:
+      Name: SecurityGroupIdDB
+  SecurityGroupMlflow:
+    Description: id of security group
+    Value: !Ref SecurityGroupMlflow
+    Export:
+      Name: SecurityGroupMlflow
+  SecurityGroupPrefect:
+    Description: id of security group
+    Value: !Ref SecurityGroupPrefect
+    Export:
+      Name: SecurityGroupPrefect
+  SecurityGroupKube:
+    Description: id of security group
+    Value: !Ref SecurityGroupKube
+    Export:
+      Name: SecurityGroupKube
+  EksSecurityGroup:
+    Description: id of security group
+    Value: !Ref EksSecurityGroup
+    Export:
+      Name: EksSecurityGroup
+  DBSubnetGroup:
+    Description: id of security group
+    Value: !Ref DBSubnetGroup
+    Export:
+      Name: DBSubnetGroup

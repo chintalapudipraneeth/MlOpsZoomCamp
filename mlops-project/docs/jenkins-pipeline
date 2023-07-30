@@ -1,0 +1,73 @@
+pipeline {
+    agent any
+
+    environment {
+        USER_CREDENTIALS = credentials('DOCKER_P')
+    }
+
+    stages {
+        stage('TestCredentials') {
+            steps {
+                sh "echo $USER_CREDENTIALS_USR"
+                sh "echo $USER_CREDENTIALS_PSW"
+            }
+        }
+        stage('GetCode') {
+            steps {
+                // Get some code from a GitHub repository
+                git url: 'https://gitlab.com/neimv/mlops-project.git', branch: 'add-integration-jenkins'
+                // Change file permisson
+                sh "ls -la"
+                script {
+                    GIT_HASH = sh (
+                        script: 'git rev-parse --short HEAD',
+                        returnStdout: true
+                    ).trim()
+                }
+                sh "cd infra/ml-service-fungus && docker build -t $USER_CREDENTIALS_USR/ml-service:${GIT_HASH} ."
+                sh "cd infra/ml-service-fungus && docker build -t $USER_CREDENTIALS_USR/ml-service:latest ."
+            }
+        }
+        stage("TestingCI") {
+            steps {
+                sh "docker build -t testing-ci -f ci-test.dockerfile ."
+                sh "docker rmi testing-ci"
+            }
+        }
+        stage("TestingIntegration") {
+            steps {
+                sh "cd infra/ml-service-fungus && docker run --name ml-fungus-integration -p 8100:8000 --network mlops-project_backend --env-file exp.env -d $USER_CREDENTIALS_USR/ml-service:${GIT_HASH}"
+                sh "docker build -t prefect-submit-integration-test -f ci-integration.dockerfile ."
+                sh "docker run --network mlops-project_backend -e RUN_EXPERIMENT=1 prefect-submit-integration-test"
+                sh "docker stop ml-fungus-integration"
+                sh "docker rm ml-fungus-integration"
+            }
+        }
+        stage("SubmitDocker") {
+            steps {
+                script {
+                    GIT_HASH = sh (
+                        script: 'git rev-parse --short HEAD',
+                        returnStdout: true
+                    ).trim()
+                }
+                sh "docker login -u $USER_CREDENTIALS_USR -p $USER_CREDENTIALS_PSW"
+                sh "docker push $USER_CREDENTIALS_USR/ml-service:${GIT_HASH}"
+                sh "docker push $USER_CREDENTIALS_USR/ml-service:latest"
+            }
+        }
+        stage("LocalDeploy") {
+            steps {
+                sh "chmod +x docker_stop.sh"
+                sh "./docker_stop.sh"
+                sh "cd infra/ml-service-fungus && docker run --name ml-fungus -p 8000:8000 --network mlops-project_backend --env-file exp.env -d $USER_CREDENTIALS_USR/ml-service:${GIT_HASH}"
+            }
+        }
+    }
+}
+
+
+
+sh "docker run --network mlops-project_backend -e RUN_EXPERIMENT=1 prefect-submit-integration-test"
+                sh "docker stop ml-fungus-integration"
+                sh "docker rm ml-fungus-integration"

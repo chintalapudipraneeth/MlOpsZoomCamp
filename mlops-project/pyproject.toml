@@ -1,0 +1,10 @@
+[tool.black]
+line-length = 79
+target-version = ['py39']
+skip-string-normalization = true
+
+[tool.isort]
+multi_line_output = 3
+length_sort = true
+line_length = 79
+profile = "black"

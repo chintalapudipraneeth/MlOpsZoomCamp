@@ -1,0 +1,109 @@
+<!doctype html>
+<head>
+    <title>poisonous or not</title>
+    <link rel="stylesheet" href="https://unpkg.com/@picocss/pico@latest/css/pico.min.css">
+</head>
+<body>
+    <main class="container">
+        <header>
+            <h1>
+                Fungis (poisonous or not)
+            </h1>
+        </header>
+
+        <form id="fungisForm">
+            {% set index = 0 %}
+            {% for field, values in data.items() %}
+                {% if index % 3 == 0 %}
+                    <div class="grid">
+                {% endif %}
+                        <label for="{{ field }}">{{ field|caps }}</label>
+                        <select id="{{ field }}">
+                            <option value="" selected>Select a {{ field|caps }}...</option>
+                            {% for value in values %}
+                            <option value="{{ value }}" required>{{ value|caps }}</option>
+                            {% endfor %}
+                        </select>
+                        <span id="{{ field }}-span" class="secondary">
+                            <mark>
+                                This field is required
+                            <mark>
+                        </span>
+                {% if index % 3 == 0 %}
+                    </div>
+                {% endif %}
+            {% set index = index + 1 %}
+            {% endfor %}
+
+            <div class="grid">
+                <!-- Button -->
+                <button type="button" onclick="sendFormFungins()">Submit</button>
+                <button type="button" class="secondary" onclick="clearAll()">Clean</button>
+            </div>
+        </form>
+
+        <output id="poisonous-or-not">
+        </output>
+    </main>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script>
+        $("span").hide();
+
+        function clearAll() {
+            $("span").hide();
+            $("#fungisForm")[0].reset();
+            $("#poisonous-or-not").empty();
+        }
+
+        function validateField() {
+            var processForm = true;
+            var data = {}
+            $("#fungisForm :input").each(function() {
+                var field = $(this);
+                var id = field.attr('id');
+                var value = $('#' + id).val();
+
+                if (typeof id !== 'undefined') {
+                    console.log(id);
+                    console.log(value);
+                    data[id] = value;
+                    if (value == "") {
+                        var idSpan = "#" + id + "-span";
+                        $(idSpan).show();
+                        processForm = false;
+                    }
+                }
+            });
+
+            return [processForm, data];
+        }
+
+        function sendFormFungins() {
+            $("span").hide();
+            var isValid = validateField();
+
+            if (isValid[0]) {
+                $.ajax("/api/predict", {
+                    data: JSON.stringify(isValid[1]),
+                    method: "POST",
+                    contentType: "application/json",
+                    success: function(data) {
+                        console.log(data);
+                        var poisonous = data["is_poisonous"] == 1 ? "Poisonous" : "No poisonous";
+                        $("#poisonous-or-not").empty();
+                        $("#poisonous-or-not").html("<b>" + poisonous + "</b>");
+                    }
+                }).done(function() {
+                    console.log( "success" );
+                })
+                .fail(function() {
+                    console.log( "error" );
+                })
+                .always(function() {
+                    console.log( "finished" );
+                });
+            }
+        }
+    </script>
+</body>

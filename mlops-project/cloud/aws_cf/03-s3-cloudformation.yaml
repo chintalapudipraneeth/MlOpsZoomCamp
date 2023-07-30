@@ -1,0 +1,22 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Resources:
+  S3BucketMlflow:
+    Type: 'AWS::S3::Bucket'
+    DeletionPolicy: Retain
+
+  S3BucketPrefect:
+    Type: 'AWS::S3::Bucket'
+    DeletionPolicy: Retain
+
+Outputs:
+  S3BucketMlflow:
+    Description: s3 name of mlflow
+    Value: !Ref S3BucketMlflow
+    Export:
+      Name: S3BucketMlflow
+  S3BucketPrefect:
+    Description: s3 name of prefect
+    Value: !Ref S3BucketPrefect
+    Export:
+      Name: S3BucketPrefect

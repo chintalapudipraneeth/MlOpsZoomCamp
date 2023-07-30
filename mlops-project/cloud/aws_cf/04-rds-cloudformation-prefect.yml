@@ -1,0 +1,115 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  DBEngine:
+    Default: postgres
+    Description: Type of engine
+    Type: String
+  DBEngineVersion:
+    Default: '14'
+    Description: Version of engine
+    Type: String
+  DBInstanceID:
+    Default: prefect
+    Description: id of instance
+    Type: String
+    MinLength: '1'
+    MaxLength: '63'
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: >-
+      Must begin with a letter and must not end with a hyphen or contain two
+      consecutive hyphens.
+  DBName:
+    Default: prefect
+    Description: database name
+    Type: String
+    MinLength: '1'
+    MaxLength: '64'
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: Must begin with a letter and contain only alphanumeric characters.
+  DBInstanceClass:
+    Default: db.t3.small
+    Description: DB instance class
+    Type: String
+    ConstraintDescription: Must select a valid DB instance type.
+  DBAllocatedStorage:
+    Default: '25'
+    Description: The size of the database (GiB)
+    Type: Number
+    MinValue: '5'
+    MaxValue: '1024'
+    ConstraintDescription: must be between 20 and 1024 GiB.
+  DBUsername:
+    NoEcho: 'true'
+    Description: Username for Postgresql database access
+    Default: prefect
+    Type: String
+    MinLength: '1'
+    MaxLength: '16'
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: must begin with a letter and contain only alphanumeric characters.
+  DBSecretsName:
+    Description: Name of SecretsManager
+    Type: String
+    Default: 'PrefectRDSSecret'
+
+Resources:
+  RDSSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+        Name: !Ref DBSecretsName
+        Description: 'Secret with dynamically generated password.'
+        GenerateSecretString:
+            RequireEachIncludedType: true
+            SecretStringTemplate: '{"username": "neimv"}'
+            GenerateStringKey: 'password'
+            PasswordLength: 25
+            ExcludePunctuation: true
+
+  DB:
+    Type: 'AWS::RDS::DBInstance'
+    Properties:
+      StorageType: 'gp2'
+      DBInstanceIdentifier: !Ref DBInstanceID
+      DBName: !Ref DBName
+      DBInstanceClass: !Ref DBInstanceClass
+      DBSubnetGroupName: !ImportValue DBSubnetGroup
+      AllocatedStorage: !Ref DBAllocatedStorage
+      Engine: !Ref DBEngine
+      EngineVersion: !Ref DBEngineVersion
+      MasterUsername: !Join ['', ['{{resolve:secretsmanager:', !Ref RDSSecret, ':SecretString:username}}' ]]
+      MasterUserPassword: !Join ['', ['{{resolve:secretsmanager:', !Ref RDSSecret, ':SecretString:password}}' ]]
+      DeleteAutomatedBackups: false
+      DeletionProtection: false
+      BackupRetentionPeriod: 1
+      EnableIAMDatabaseAuthentication: false
+      PubliclyAccessible: false
+      VPCSecurityGroups:
+        - !ImportValue SecurityGroupIdDB
+
+Outputs:
+  PrefectDatabaseName:
+    Description: Instance name
+    Value: !Ref DB
+    Export:
+      Name: PrefectDatabaseName
+  PrefectDatabasePort:
+    Description: Port of database
+    Value: !GetAtt DB.Endpoint.Port
+    Export:
+      Name: PrefectDatabasePort
+  PrefectDatabaseUrl:
+    Description: URL of database
+    Value: !GetAtt DB.Endpoint.Address
+    Export:
+      Name: PrefectDatabaseUrl
+  PrefectDatabaseSecrets:
+    Description: Arn of secretsmanager
+    Value: !Ref RDSSecret
+    Export:
+      Name: PrefectDBSecrets
+  PrefectDatabaseSecretsName:
+    Description: Name of secretsmanager
+    Value: !Ref DBSecretsName
+    Export:
+      Name: PrefectDatabaseSecretsName
